@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
-import { getChecks, getItems } from "@/lib/data";
+import { getChecks, getDayNote, getItems } from "@/lib/data";
+import { DayNote } from "@/components/DayNote";
 import { addDays, dayLabel } from "@/lib/links";
 import { isDate, todaySeoul } from "@/lib/time";
 import { checkAll } from "@/lib/actions";
@@ -12,7 +13,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const today = todaySeoul();
   const sp = await searchParams;
   const day = isDate(sp.day) && sp.day <= today ? sp.day : today;
-  const [items, checks] = await Promise.all([getItems(), getChecks(day, day)]);
+  const [items, checks, note] = await Promise.all([getItems(), getChecks(day, day), getDayNote(day)]);
   const by = new Map(checks.map((c) => [c.item_id, c]));
   const done = items.filter((i) => by.get(i.id)?.checked_at).length;
   const pct = items.length ? Math.round((done / items.length) * 100) : 0;
@@ -36,12 +37,13 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
           )}
         </div>
       </div>
+      <DayNote key={`note-${day}`} day={day} body={note?.body ?? ""} updatedAt={note?.updated_at ?? null} />
       {items.length === 0 ? (
         <div className="card p-8 text-center text-sm text-stone-500">
           아직 링크가 없습니다. <Link href="/links" className="font-medium text-brand hover:underline">링크 관리</Link>에서 목록을 붙여넣어 한 번에 넣으세요.
         </div>
       ) : (
-        <TodayList key={day} day={day} rows={items.map((item) => ({ item, check: by.get(item.id) ?? null }))} />
+        <TodayList key={`list-${day}`} day={day} rows={items.map((item) => ({ item, check: by.get(item.id) ?? null }))} />
       )}
       <p className="text-xs text-stone-500">이름을 누르면 새 탭으로 열리고 &lsquo;열어 봄&rsquo; 시각이 남습니다. 동그라미를 누르면 확인 시각이 기록됩니다 (다시 누르면 취소). 지난 날짜도 ◀로 가서 고칠 수 있습니다.</p>
     </div>

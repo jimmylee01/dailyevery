@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
-  const links = user ? [["/", "오늘"], ["/board", "기록표"], ["/links", "링크 관리"]] : [];
+  const links = user ? [["/", "오늘"], ["/month", "월별 기록"], ["/board", "기록표"], ["/links", "링크 관리"]] : [];
   return (
     <html lang="ko">
       <body className="min-h-screen">
