@@ -57,6 +57,16 @@ export async function checkAll(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
+/** 그날의 메모 (비우면 지움) */
+export async function saveDayNote(day: string, body: string) {
+  await requireUser();
+  const d = isDate(day) ? day : todaySeoul();
+  const t = body.replace(/\r/g, "").trim().slice(0, 20000);
+  if (t) await q("insert into day_notes (day, body, updated_at) values ($1,$2,now()) on conflict (day) do update set body=excluded.body, updated_at=now()", [d, t]);
+  else await q("delete from day_notes where day=$1", [d]);
+  revalidatePath("/", "layout");
+}
+
 /* ───────── 링크 관리 ───────── */
 
 export async function addItem(_p: FormState, fd: FormData): Promise<FormState> {

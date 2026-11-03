@@ -21,7 +21,8 @@ function ensureSchema(): Promise<void> {
          checked_at timestamptz, opened_at timestamptz, memo text,
          primary key (item_id, day)
        );
-       create table if not exists settings (key text primary key, value text not null);`,
+       create table if not exists settings (key text primary key, value text not null);
+       create table if not exists day_notes (day date primary key, body text not null default '', updated_at timestamptz not null default now());`,
     )
     .then(() => undefined)
     .catch((e) => { g._schemaReady = undefined; throw e; });
