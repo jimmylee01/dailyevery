@@ -40,7 +40,14 @@ function ensureSchema(): Promise<void> {
          created_at timestamptz not null default now()
        );
        create unique index if not exists tasks_repeat_month on tasks(repeat_id, month) where repeat_id is not null;
-       create index if not exists tasks_done on tasks(done_at);`,
+       create index if not exists tasks_done on tasks(done_at);
+       create table if not exists attachments (
+         id serial primary key, drive_id text not null, name text not null, mime text not null default '',
+         size bigint, link text not null default '', task_id int references tasks(id) on delete cascade, day date,
+         created_at timestamptz not null default now()
+       );
+       create index if not exists attachments_task on attachments(task_id);
+       create index if not exists attachments_day on attachments(day);`,
     )
     .then(() => undefined)
     .catch((e) => { g._schemaReady = undefined; throw e; });

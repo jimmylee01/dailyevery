@@ -1,6 +1,6 @@
 import tls from "node:tls";
 import { q } from "@/lib/db";
-import { getItems, getSetting } from "@/lib/data";
+import { getDayNote, getItems, getSetting } from "@/lib/data";
 import { DEFAULT_LIST, ensureMonth, type Task } from "@/lib/tasks";
 import { addDays, dayLabel, isWeekend } from "@/lib/links";
 import { todaySeoul } from "@/lib/time";
@@ -14,7 +14,7 @@ export function siteUrl(): string {
 /* ───────── 알림 내용 만들기 ───────── */
 
 type Line = { date: string | null; title: string; note: string; list: string };
-export type Digest = { today: string; overdue: Line[]; due: Line[]; soon: Line[]; mine: Line[]; important: Line[]; links: number; days: number };
+export type Digest = { today: string; memo: string; overdue: Line[]; due: Line[]; soon: Line[]; mine: Line[]; important: Line[]; links: number; days: number };
 
 const asLine = (t: Task): Line => ({ date: t.due, title: t.title, note: t.note, list: t.list_name ?? DEFAULT_LIST });
 
@@ -26,8 +26,9 @@ export async function buildDigest(today = todaySeoul()): Promise<Digest> {
                               from tasks t left join lists l on l.id=t.list_id where t.done_at is null and not t.hidden order by t.due nulls last, t.id`);
   const until = addDays(today, days);
   const links = !isWeekend(today) ? (await getItems()).length : 0;
+  const memo = (await getDayNote(today))?.body ?? "";
   return {
-    today, days, links,
+    today, days, links, memo,
     overdue: open.filter((t) => t.due && t.due < today).map(asLine),
     due: open.filter((t) => t.due === today).map(asLine),
     soon: open.filter((t) => t.due && t.due > today && t.due <= until).map(asLine),
@@ -42,6 +43,7 @@ export function digestText(g: Digest): string {
   const sec = (h: string, ls: Line[]) => (ls.length ? [`■ ${h} (${ls.length})`, ...ls.map((l) => `- ${l.date ? `[${md(l.date)}] ` : ""}${l.title}${l.note ? ` — ${l.note}` : ""}`), ""] : []);
   return [
     `DailyEvery · ${dayLabel(g.today, true)}`, "",
+    ...(g.memo ? ["■ 이날 메모", g.memo, ""] : []),
     ...sec("지난 날짜인데 아직 안 함", g.overdue),
     ...sec("오늘까지", g.due),
     ...sec(`앞으로 ${g.days}일 안`, g.soon),
@@ -61,6 +63,7 @@ export function digestHtml(g: Digest): string {
   return `<div style="font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;color:#1c1917;max-width:560px">
 <div style="font-size:18px;font-weight:700;color:#3730a3">✓ DailyEvery</div>
 <div style="color:#57534e;margin-top:2px">${esc(dayLabel(g.today, true))}</div>
+${g.memo ? `<div style="margin-top:14px;padding:12px 14px;background:#eef2ff;border-radius:8px;white-space:pre-line;line-height:1.6"><b>📝 이날 메모</b><br>${esc(g.memo)}</div>` : ""}
 ${sec("지난 날짜인데 아직 안 함", "#be123c", g.overdue)}
 ${sec("오늘까지", "#b45309", g.due)}
 ${sec(`앞으로 ${g.days}일 안`, "#0369a1", g.soon)}
@@ -79,6 +82,23 @@ export function digestShort(g: Digest): string {
   if (g.links) parts.push(`링크 ${g.links}개 확인`);
   const t = parts.join("\n");
   return t.length > 195 ? t.slice(0, 192) + "…" : t;
+}
+
+/** 이날 메모를 카톡 한 통(200자)씩 나누기 — 최대 4통 */
+export function memoParts(g: Digest): string[] {
+  if (!g.memo) return [];
+  const head = `📝 ${md(g.today)} 메모\n`;
+  const out: string[] = [];
+  let rest = g.memo;
+  while (rest && out.length < 4) {
+    const room = 195 - head.length;
+    let cut = rest.length <= room ? rest.length : rest.lastIndexOf("\n", room);
+    if (cut < room / 2) cut = room;
+    out.push(head + rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) out[out.length - 1] = out[out.length - 1].slice(0, 190) + "…(이어서 사이트에서)";
+  return out;
 }
 
 /* ───────── Gmail 보내기 (앱 비밀번호, SMTP 465) ───────── */
@@ -198,18 +218,22 @@ export async function sendKakaoMemo(text: string) {
 
 export async function sendReminder({ force = false } = {}): Promise<{ sent: string[]; errors: string[]; skipped?: string }> {
   const g = await buildDigest();
-  const has = g.overdue.length + g.due.length + g.soon.length > 0;
+  const has = g.overdue.length + g.due.length + g.soon.length > 0 || !!g.memo;
   if (!force && !has && !g.mine.length) return { sent: [], errors: [], skipped: "보낼 내용 없음" };
   const sent: string[] = [], errors: string[] = [];
   if ((await getSetting("email_on", "0")) === "1") {
     const to = (await getSetting("notify_email")) || adminEmails()[0] || "";
     const n = g.overdue.length + g.due.length;
-    const subject = `[DailyEvery] ${dayLabel(g.today)} ${n ? `마감 ${n}개` : g.soon.length ? `곧 마감 ${g.soon.length}개` : `오늘 할 일 ${g.mine.length}개`}`;
+    const subject = `[DailyEvery] ${dayLabel(g.today)} ${g.memo ? `📝 ${g.memo.split("\n")[0].slice(0, 30)}` : n ? `마감 ${n}개` : g.soon.length ? `곧 마감 ${g.soon.length}개` : `오늘 할 일 ${g.mine.length}개`}`;
     try { if (!to) throw new Error("받을 이메일이 없습니다"); await sendGmail(to, subject, digestText(g), digestHtml(g)); sent.push(`이메일(${to})`); }
     catch (e) { errors.push(`이메일: ${(e as Error).message}`); }
   }
   if ((await getSetting("kakao_on", "0")) === "1") {
-    try { await sendKakaoMemo(digestShort(g)); sent.push("카카오톡"); }
+    try {
+      for (const part of memoParts(g)) await sendKakaoMemo(part);
+      if (g.overdue.length + g.due.length + g.soon.length + g.mine.length + g.important.length > 0 || !g.memo) await sendKakaoMemo(digestShort(g));
+      sent.push("카카오톡");
+    }
     catch (e) { errors.push(`카카오톡: ${(e as Error).message}`); }
   }
   await setSetting("last_notify", `${new Date().toISOString()}|${sent.join(", ") || "-"}|${errors.join(" / ")}`);

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { addTask, completeTask, deleteTask, reopenTask, saveDoneNote, saveTask, toggleImportant } from "@/lib/actions-tasks";
 import { color, DEFAULT_LIST, type List, type Task } from "@/lib/task-types";
 import { dayLabel, hm } from "@/lib/links";
+import { Attachments } from "@/components/Attachments";
 
 type S = { error?: string; ok?: string } | undefined;
 const Msg = ({ s }: { s?: S }) =>
@@ -88,6 +89,7 @@ export function TaskRow({ t, today, lists, showList = true, showMyDay = true }: 
             {due && <span className={due.cls}>📅 {due.t}</span>}
             {t.repeat_id && <span className="text-stone-500">🔁 매달</span>}
             {t.note && <span className="truncate text-stone-500">📝 {t.note.split("\n")[0]}</span>}
+            {t.atts.length > 0 && <span className="text-stone-500">📎 {t.atts.length}</span>}
           </div>
         </button>
         <button type="button" title={imp ? "중요 해제" : "중요"} onClick={() => { setImp(!imp); start(() => toggleImportant(t.id)); }} className="shrink-0 p-1">
@@ -128,6 +130,7 @@ function Editor({ t, lists, today, imp, onClose, onGone }: { t: Task; lists: Lis
         {t.repeat_id && <label className="flex items-center gap-1"><input type="checkbox" name="apply_repeat" /> 다음 달부터도 이렇게 (날짜는 &lsquo;일&rsquo;만)</label>}
       </div>
       <textarea name="note" defaultValue={t.note} rows={Math.max(2, t.note.split("\n").length)} className="input" placeholder="메모" />
+      <Attachments target={{ taskId: t.id }} items={t.atts} />
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn !py-1" disabled={pending}>저장</button>
         <button type="button" className="btn-ghost !py-1" onClick={onClose}>닫기</button>
@@ -183,6 +186,7 @@ export function DoneRow({ t, showDate = false }: { t: Task; showDate?: boolean }
           {t.due && <span className="text-stone-400">마감 {dayLabel(t.due)}</span>}
         </div>
         <DoneMemo id={t.id} memo={t.done_note} />
+        <div className="mt-1.5"><Attachments target={{ taskId: t.id }} items={t.atts} label="결과 사진 · 파일" compact /></div>
       </div>
     </div>
   );

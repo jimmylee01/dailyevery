@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { getChecks, getDayNote, getItems } from "@/lib/data";
-import { getCounts, getDoneOn, getLists, getTasks, color, DEFAULT_LIST, type Task, type View } from "@/lib/tasks";
+import { getCounts, getDayAtts, getDoneOn, getLists, getTasks, color, DEFAULT_LIST, type Task, type View } from "@/lib/tasks";
 import { addDays, dayLabel } from "@/lib/links";
 import { isDate, todaySeoul } from "@/lib/time";
 import { Sidebar } from "@/components/Sidebar";
@@ -39,14 +39,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
 
   /* ── 오늘 할 일 (+ 오른쪽 링크) ── */
   if (v === "today") {
-    const day = isDate(sp.day) && sp.day <= today ? sp.day : today;
+    const day = isDate(sp.day) ? sp.day : today;
+    const future = day > today;
     const isToday = day === today;
-    const [tasks, doneOn, note, items, checks] = await Promise.all([
-      isToday ? getTasks("today", { today }) : Promise.resolve([] as Task[]),
-      getDoneOn(day), getDayNote(day), getItems(), getChecks(day, day),
+    const [tasks, doneOn, note, items, checks, dayAtts] = await Promise.all([
+      isToday ? getTasks("today", { today }) : future ? getTasks("planned", { today }).then((ts) => ts.filter((t) => t.due === day)) : Promise.resolve([] as Task[]),
+      getDoneOn(day), getDayNote(day), getItems(), getChecks(day, day), getDayAtts(day),
     ]);
     const opened = Object.fromEntries(checks.filter((c) => c.opened_at).map((c) => [c.item_id, c.opened_at!]));
-    const late = tasks.filter((t) => t.due && t.due < today);
+    const late = isToday ? tasks.filter((t) => t.due && t.due < today) : [];
     const rest = tasks.filter((t) => !(t.due && t.due < today));
     return (
       <div className="grid gap-5 lg:grid-cols-[210px_1fr_270px]">
@@ -56,7 +57,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
             <span className="flex items-center gap-1 text-sm text-stone-500">
               <Link href={`/?day=${addDays(day, -1)}`} className="btn-ghost !px-1.5 !py-0">◀</Link>
               {dayLabel(day, true)}
-              {!isToday && <Link href={`/?day=${addDays(day, 1)}`} className="btn-ghost !px-1.5 !py-0">▶</Link>}
+              <Link href={`/?day=${addDays(day, 1)}`} className="btn-ghost !px-1.5 !py-0">▶</Link>
               {!isToday && <Link href="/" className="btn-ghost !py-0 text-xs">오늘로</Link>}
             </span>,
           )}
@@ -65,6 +66,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
             <section className="space-y-1.5">
               <h2 className="text-xs font-semibold text-rose-700">마감 지남 {late.length}</h2>
               {late.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} showMyDay={false} />)}
+            </section>
+          )}
+          {future && (
+            <section className="space-y-1.5">
+              <h2 className="text-xs font-semibold text-sky-800">이날 마감인 할 일 {tasks.length}</h2>
+              {tasks.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} />)}
+              {tasks.length === 0 && <p className="text-xs text-stone-400">없음 · 할 일을 열어 마감일을 이날로 정하면 여기 나옵니다.</p>}
             </section>
           )}
           {isToday && (
@@ -80,7 +88,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
               {doneOn.map((t) => <DoneRow key={t.id} t={t} />)}
             </section>
           )}
-          <DayNote key={`note-${day}`} day={day} body={note?.body ?? ""} updatedAt={note?.updated_at ?? null} />
+          <DayNote key={`note-${day}`} day={day} body={note?.body ?? ""} updatedAt={note?.updated_at ?? null} atts={dayAtts}
+            title={isToday ? "📝 오늘의 메모" : future ? `📝 ${dayLabel(day)} 메모` : `📝 ${dayLabel(day)} 메모`}
+            hint={future ? `여기 적은 메모는 ${dayLabel(day)} 아침 8시쯤 카카오톡 · 이메일로 보내 드립니다 (설정 · 알림에서 켠 곳으로).` : undefined} />
         </div>
         <LinkPanel key={day} items={items} opened={opened} day={day} />
       </div>

@@ -7,14 +7,16 @@ import { NotifyForm } from "@/components/NotifyForms";
 import { AddListForm, ListRow } from "@/components/ListForms";
 import { siteUrl } from "@/lib/notify";
 import { todaySeoul } from "@/lib/time";
+import { disconnectDrive } from "@/lib/actions-files";
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ kakao?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ kakao?: string; drive?: string }> }) {
   await requireUser();
   const sp = await searchParams;
   const [email, days, emailOn, kakaoOn, refresh, refreshExp, last, lists] = await Promise.all([
     getSetting("notify_email"), getSetting("notify_days", "3"), getSetting("email_on", "0"), getSetting("kakao_on", "0"),
     getSetting("kakao_refresh"), getSetting("kakao_refresh_exp", "0"), getSetting("last_notify"), getLists(),
   ]);
+  const [driveRefresh, driveFolder] = await Promise.all([getSetting("gdrive_refresh"), getSetting("gdrive_folder")]);
   const gmailReady = !!process.env.GMAIL_USER && !!process.env.GMAIL_APP_PASSWORD;
   const kakaoKey = !!process.env.KAKAO_REST_KEY;
   const cronReady = !!process.env.CRON_SECRET;
@@ -58,6 +60,34 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <li>플랫폼 → Web 사이트 도메인에 <code>{site}</code> 등록</li>
               <li>Vercel Redeploy 후 이 화면의 &lsquo;카카오톡 연결&rsquo; 누르기</li>
             </ol>
+          </div>
+        )}
+      </section>
+
+      <section className="card space-y-3 p-4">
+        <h2 className="font-semibold">📎 구글 드라이브 (사진 · PDF 첨부)</h2>
+        <p className="text-sm text-stone-600">할 일 · 끝낸 일 · 날짜 메모에 붙인 파일은 내 구글 드라이브의 &lsquo;DailyEvery&rsquo; 폴더에 저장됩니다. DailyEvery는 그 폴더에 직접 올린 파일만 볼 수 있습니다.</p>
+        {sp.drive === "ok" && <p className="rounded-md bg-emerald-50 p-2 text-sm text-emerald-800">구글 드라이브가 연결됐습니다. 이제 파일을 붙일 수 있습니다.</p>}
+        {sp.drive && sp.drive !== "ok" && <p className="rounded-md bg-rose-50 p-2 text-sm text-rose-800">연결 실패: {sp.drive}</p>}
+        {driveRefresh ? (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="font-semibold text-emerald-700">연결됨</span>
+            {driveFolder && <a href={`https://drive.google.com/drive/folders/${driveFolder}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">드라이브 폴더 열기 ↗</a>}
+            <a href="/api/gdrive" className="btn-ghost !py-1 text-sm">다시 연결</a>
+            <form action={disconnectDrive}><button className="text-xs text-stone-400 hover:text-rose-700">연결 끊기</button></form>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="space-y-1 rounded-md bg-stone-50 p-3 text-sm text-stone-700">
+              <p className="font-semibold">처음 한 번만 준비 (Google Cloud 콘솔 · DailyEvery 프로젝트)</p>
+              <ol className="list-decimal space-y-0.5 pl-5">
+                <li>API 및 서비스 → 라이브러리 → <b>Google Drive API</b> → 사용</li>
+                <li>사용자 인증 정보 → OAuth 클라이언트 → 승인된 리디렉션 URI에 <code>{site}/api/gdrive</code> 추가 → 저장</li>
+                <li>OAuth 동의 화면(Google 인증 플랫폼) → 데이터 액세스 → 범위 추가 → <code>.../auth/drive.file</code> 체크 → 저장</li>
+                <li>대상(게시 상태) → <b>앱 게시</b> (테스트 상태로 두면 7일마다 연결이 끊깁니다)</li>
+              </ol>
+            </div>
+            <a href="/api/gdrive" className="btn inline-block">구글 드라이브 연결</a>
           </div>
         )}
       </section>

@@ -3,8 +3,9 @@ export type List = { id: number; name: string; color: string; sort: number; open
 export type Task = {
   id: number; title: string; list_id: number | null; list_name: string | null; list_color: string | null;
   due: string | null; my_day: string | null; month: string | null; important: boolean; note: string;
-  done_at: string | null; done_note: string; repeat_id: number | null;
+  done_at: string | null; done_note: string; repeat_id: number | null; atts: Att[];
 };
+export type Att = { id: number; drive_id: string; name: string; mime: string; link: string };
 export type View = "today" | "important" | "planned" | "inbox" | "done" | "list";
 
 export const DEFAULT_LIST = "작업";

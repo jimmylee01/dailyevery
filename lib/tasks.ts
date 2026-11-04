@@ -1,9 +1,9 @@
 import { q } from "@/lib/db";
 import { todaySeoul } from "@/lib/time";
 
-import { COLORS, color, DEFAULT_LIST, type List, type Task, type View } from "@/lib/task-types";
+import { COLORS, color, DEFAULT_LIST, type Att, type List, type Task, type View } from "@/lib/task-types";
 export { COLORS, color, DEFAULT_LIST };
-export type { List, Task, View };
+export type { Att, List, Task, View };
 
 const pad = (n: number) => String(n).padStart(2, "0");
 export const isMonthStr = (v: unknown): v is string => typeof v === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
@@ -29,7 +29,10 @@ export async function ensureMonth(month: string) {
 }
 
 const SELECT = `select t.id, t.title, t.list_id, l.name as list_name, l.color as list_color, t.due::text, t.my_day::text, t.month,
-  t.important, t.note, t.done_at, t.done_note, t.repeat_id from tasks t left join lists l on l.id = t.list_id`;
+  t.important, t.note, t.done_at, t.done_note, t.repeat_id,
+  (select coalesce(json_agg(json_build_object('id', a.id, 'drive_id', a.drive_id, 'name', a.name, 'mime', a.mime, 'link', a.link) order by a.id), '[]'::json)
+     from attachments a where a.task_id = t.id) as atts
+  from tasks t left join lists l on l.id = t.list_id`;
 
 export async function getLists(): Promise<List[]> {
   return q<List>(`select l.id, l.name, l.color, l.sort, (select count(*)::int from tasks t where t.list_id = l.id and t.done_at is null and not t.hidden) as open
@@ -84,5 +87,14 @@ export async function getDoneByDay(from: string, to: string): Promise<Map<string
   const rows = await q<{ day: string; n: number }>(
     `select ((done_at at time zone 'Asia/Seoul')::date)::text as day, count(*)::int as n from tasks
      where not hidden and done_at is not null and (done_at at time zone 'Asia/Seoul')::date between $1 and $2 group by 1`, [from, to]);
+  return new Map(rows.map((r) => [r.day, r.n]));
+}
+
+/** 그날 메모에 붙인 파일 */
+export async function getDayAtts(day: string): Promise<Att[]> {
+  return q<Att>("select id, drive_id, name, mime, link from attachments where day = $1 order by id", [day]);
+}
+export async function getDayAttCounts(from: string, to: string): Promise<Map<string, number>> {
+  const rows = await q<{ day: string; n: number }>("select day::text, count(*)::int as n from attachments where day between $1 and $2 group by 1", [from, to]);
   return new Map(rows.map((r) => [r.day, r.n]));
 }
