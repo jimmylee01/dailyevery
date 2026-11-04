@@ -22,7 +22,25 @@ function ensureSchema(): Promise<void> {
          primary key (item_id, day)
        );
        create table if not exists settings (key text primary key, value text not null);
-       create table if not exists day_notes (day date primary key, body text not null default '', updated_at timestamptz not null default now());`,
+       create table if not exists day_notes (day date primary key, body text not null default '', updated_at timestamptz not null default now());
+       create table if not exists lists (
+         id serial primary key, name text not null, color text not null default 'indigo', sort int not null default 0,
+         created_at timestamptz not null default now()
+       );
+       create table if not exists repeat_tasks (
+         id serial primary key, title text not null, list_id int references lists(id) on delete set null, day int,
+         note text not null default '', important boolean not null default false, from_month text not null,
+         active boolean not null default true, created_at timestamptz not null default now()
+       );
+       create table if not exists tasks (
+         id serial primary key, title text not null, list_id int references lists(id) on delete set null,
+         due date, my_day date, month text, important boolean not null default false, note text not null default '',
+         done_at timestamptz, done_note text not null default '',
+         repeat_id int references repeat_tasks(id) on delete set null, hidden boolean not null default false,
+         created_at timestamptz not null default now()
+       );
+       create unique index if not exists tasks_repeat_month on tasks(repeat_id, month) where repeat_id is not null;
+       create index if not exists tasks_done on tasks(done_at);`,
     )
     .then(() => undefined)
     .catch((e) => { g._schemaReady = undefined; throw e; });

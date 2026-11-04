@@ -6,18 +6,18 @@ import { signOut } from "@/auth";
 
 export const metadata: Metadata = {
   title: "DailyEvery",
-  description: "DailyEvery — 매일 확인하는 링크 체크리스트 · 기록표",
+  description: "DailyEvery — 할 일 · 매일 보는 링크 · 월별 기록",
   robots: { index: false, follow: false },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
-  const links = user ? [["/", "오늘"], ["/month", "월별 기록"], ["/board", "기록표"], ["/links", "링크 관리"]] : [];
+  const links = user ? [["/", "할 일"], ["/month", "월별 기록"], ["/links", "링크 관리"], ["/settings", "설정 · 알림"]] : [];
   return (
     <html lang="ko">
       <body className="min-h-screen">
         <header className="border-b border-stone-200 bg-white">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
             <Link href="/" className="flex items-center gap-2 font-semibold text-brand">
               <span className="inline-block h-6 w-6 rounded-md bg-brand text-center text-sm leading-6 text-white">✓</span>
               DailyEvery
@@ -35,7 +35,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             )}
           </div>
         </header>
-        <main className="mx-auto max-w-5xl px-4 py-5">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 py-5">{children}</main>
       </body>
     </html>
   );

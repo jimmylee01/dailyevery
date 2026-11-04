@@ -1,51 +1,133 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { getChecks, getDayNote, getItems } from "@/lib/data";
-import { DayNote } from "@/components/DayNote";
+import { getCounts, getDoneOn, getLists, getTasks, color, DEFAULT_LIST, type Task, type View } from "@/lib/tasks";
 import { addDays, dayLabel } from "@/lib/links";
 import { isDate, todaySeoul } from "@/lib/time";
-import { checkAll } from "@/lib/actions";
-import { TodayList } from "@/components/TodayList";
-import { ConfirmButton } from "@/components/ConfirmButton";
+import { Sidebar } from "@/components/Sidebar";
+import { AddTask, DoneList, DoneRow, TaskRow } from "@/components/Tasks";
+import { DayNote } from "@/components/DayNote";
+import { LinkPanel } from "@/components/LinkPanel";
 
-export default async function TodayPage({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
+const VIEWS: Record<string, { title: string; icon: string; cls: string }> = {
+  today: { title: "오늘 할 일", icon: "☀", cls: "text-indigo-700" },
+  important: { title: "중요", icon: "★", cls: "text-rose-700" },
+  planned: { title: "계획된 일정", icon: "📅", cls: "text-sky-800" },
+  inbox: { title: DEFAULT_LIST, icon: "🏠", cls: "text-indigo-700" },
+  done: { title: "끝난 일", icon: "✓", cls: "text-emerald-700" },
+};
+
+export default async function Home({ searchParams }: { searchParams: Promise<{ v?: string; id?: string; day?: string }> }) {
   await requireUser();
   const today = todaySeoul();
   const sp = await searchParams;
-  const day = isDate(sp.day) && sp.day <= today ? sp.day : today;
-  const [items, checks, note] = await Promise.all([getItems(), getChecks(day, day), getDayNote(day)]);
-  const by = new Map(checks.map((c) => [c.item_id, c]));
-  const done = items.filter((i) => by.get(i.id)?.checked_at).length;
-  const pct = items.length ? Math.round((done / items.length) * 100) : 0;
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/?day=${addDays(day, -1)}`} className="btn-ghost !px-2">◀</Link>
-        <h1 className="text-xl font-semibold">{dayLabel(day, true)}</h1>
-        {day < today && <Link href={`/?day=${addDays(day, 1)}`} className="btn-ghost !px-2">▶</Link>}
-        {day !== today && <Link href="/" className="btn-ghost text-sm">오늘로</Link>}
-        <div className="ml-auto flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-sm"><b className="text-lg tabular-nums text-emerald-700">{done}</b> / {items.length} 확인</div>
-            <div className="mt-1 h-2 w-40 overflow-hidden rounded-full bg-stone-200"><div className="h-full bg-emerald-600 transition-all" style={{ width: `${pct}%` }} /></div>
-          </div>
-          {done < items.length && items.length > 0 && (
-            <form action={checkAll}>
-              <input type="hidden" name="day" value={day} />
-              <ConfirmButton message={`남은 ${items.length - done}개를 모두 확인으로 표시할까요?`} className="btn-ghost text-sm">남은 것 모두 확인</ConfirmButton>
-            </form>
+  const v = (sp.v && (sp.v in VIEWS || sp.v === "list") ? sp.v : "today") as View;
+  const [counts, lists] = await Promise.all([getCounts(today), getLists()]);
+  const list = v === "list" ? lists.find((l) => l.id === Number(sp.id)) : undefined;
+  if (v === "list" && !list) notFound();
+  const active = v === "list" ? `list${list!.id}` : v;
+  const head = list ? { title: list.name, icon: "●", cls: color(list.color).text } : VIEWS[v];
+
+  const side = <Sidebar active={active} counts={counts} lists={lists} />;
+  const title = (extra?: React.ReactNode) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <h1 className={`text-2xl font-bold ${head.cls}`}><span className="mr-1.5">{head.icon}</span>{head.title}</h1>
+      {extra}
+    </div>
+  );
+
+  /* ── 오늘 할 일 (+ 오른쪽 링크) ── */
+  if (v === "today") {
+    const day = isDate(sp.day) && sp.day <= today ? sp.day : today;
+    const isToday = day === today;
+    const [tasks, doneOn, note, items, checks] = await Promise.all([
+      isToday ? getTasks("today", { today }) : Promise.resolve([] as Task[]),
+      getDoneOn(day), getDayNote(day), getItems(), getChecks(day, day),
+    ]);
+    const opened = Object.fromEntries(checks.filter((c) => c.opened_at).map((c) => [c.item_id, c.opened_at!]));
+    const late = tasks.filter((t) => t.due && t.due < today);
+    const rest = tasks.filter((t) => !(t.due && t.due < today));
+    return (
+      <div className="grid gap-5 lg:grid-cols-[210px_1fr_270px]">
+        {side}
+        <div className="min-w-0 space-y-4">
+          {title(
+            <span className="flex items-center gap-1 text-sm text-stone-500">
+              <Link href={`/?day=${addDays(day, -1)}`} className="btn-ghost !px-1.5 !py-0">◀</Link>
+              {dayLabel(day, true)}
+              {!isToday && <Link href={`/?day=${addDays(day, 1)}`} className="btn-ghost !px-1.5 !py-0">▶</Link>}
+              {!isToday && <Link href="/" className="btn-ghost !py-0 text-xs">오늘로</Link>}
+            </span>,
           )}
+          {isToday && <AddTask view="today" lists={lists} placeholder="오늘 할 일 추가" />}
+          {late.length > 0 && (
+            <section className="space-y-1.5">
+              <h2 className="text-xs font-semibold text-rose-700">마감 지남 {late.length}</h2>
+              {late.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} showMyDay={false} />)}
+            </section>
+          )}
+          {isToday && (
+            <section className="space-y-1.5">
+              {late.length > 0 && <h2 className="text-xs font-semibold text-stone-600">오늘</h2>}
+              {rest.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} showMyDay={false} />)}
+              {tasks.length === 0 && <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-sm text-stone-400">오늘 할 일이 없습니다. 위에 적거나, 다른 목록의 할 일을 열어 &lsquo;☀ 오늘 할 일에 넣기&rsquo;를 체크하세요.</p>}
+            </section>
+          )}
+          {doneOn.length > 0 && (
+            <section className="space-y-1.5">
+              <h2 className="text-xs font-semibold text-emerald-700">{isToday ? "오늘" : dayLabel(day)} 끝낸 일 {doneOn.length}</h2>
+              {doneOn.map((t) => <DoneRow key={t.id} t={t} />)}
+            </section>
+          )}
+          <DayNote key={`note-${day}`} day={day} body={note?.body ?? ""} updatedAt={note?.updated_at ?? null} />
+        </div>
+        <LinkPanel key={day} items={items} opened={opened} day={day} />
+      </div>
+    );
+  }
+
+  /* ── 끝난 일 ── */
+  if (v === "done") {
+    const tasks = await getTasks("done");
+    return (
+      <div className="grid gap-5 lg:grid-cols-[210px_1fr]">
+        {side}
+        <div className="min-w-0 space-y-4">
+          {title(<span className="text-sm text-stone-500">최근 300개 · ✓를 누르면 다시 할 일로 되돌립니다</span>)}
+          <DoneList tasks={tasks} />
         </div>
       </div>
-      <DayNote key={`note-${day}`} day={day} body={note?.body ?? ""} updatedAt={note?.updated_at ?? null} />
-      {items.length === 0 ? (
-        <div className="card p-8 text-center text-sm text-stone-500">
-          아직 링크가 없습니다. <Link href="/links" className="font-medium text-brand hover:underline">링크 관리</Link>에서 목록을 붙여넣어 한 번에 넣으세요.
-        </div>
-      ) : (
-        <TodayList key={`list-${day}`} day={day} rows={items.map((item) => ({ item, check: by.get(item.id) ?? null }))} />
-      )}
-      <p className="text-xs text-stone-500">이름을 누르면 새 탭으로 열리고 &lsquo;열어 봄&rsquo; 시각이 남습니다. 동그라미를 누르면 확인 시각이 기록됩니다 (다시 누르면 취소). 지난 날짜도 ◀로 가서 고칠 수 있습니다.</p>
+    );
+  }
+
+  /* ── 중요 · 계획된 일정 · 작업 · 목록 ── */
+  const tasks = await getTasks(v, { listId: list?.id, today });
+  let groups: [string, Task[], string][] = [["", tasks, ""]];
+  if (v === "planned") {
+    const tmr = addDays(today, 1), week = addDays(today, 6);
+    groups = ([
+      ["지남", tasks.filter((t) => t.due! < today), "text-rose-700"],
+      ["오늘", tasks.filter((t) => t.due === today), "text-amber-700"],
+      ["내일", tasks.filter((t) => t.due === tmr), "text-stone-700"],
+      ["이번 주", tasks.filter((t) => t.due! > tmr && t.due! <= week), "text-stone-700"],
+      ["나중에", tasks.filter((t) => t.due! > week), "text-stone-700"],
+    ] as [string, Task[], string][]).filter(([, ts]) => ts.length);
+  }
+  return (
+    <div className="grid gap-5 lg:grid-cols-[210px_1fr]">
+      {side}
+      <div className="min-w-0 space-y-4">
+        {title(<span className="text-sm text-stone-500">{tasks.length}개 남음</span>)}
+        <AddTask key={active} view={v} listId={list?.id} lists={lists} placeholder={v === "planned" ? "할 일 추가 (마감: 오늘, 바꾸려면 '날짜 · 목록')" : "할 일 추가"} />
+        {groups.map(([g, ts, cls]) => (
+          <section key={g || "_"} className="space-y-1.5">
+            {g && <h2 className={`text-xs font-semibold ${cls}`}>{g} {ts.length}</h2>}
+            {ts.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} showList={v !== "list" && v !== "inbox"} />)}
+          </section>
+        ))}
+        {tasks.length === 0 && <p className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-400">남은 할 일이 없습니다.</p>}
+      </div>
     </div>
   );
 }
