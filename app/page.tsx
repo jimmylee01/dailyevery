@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { getChecks, getDayNote, getItems } from "@/lib/data";
-import { getCounts, getDayAtts, getDoneOn, getLists, getTasks, color, DEFAULT_LIST, type Task, type View } from "@/lib/tasks";
+import { getCounts, getDayAtts, getDoneOn, getLabelDone, getLabels, getLists, getTasks, color, DEFAULT_LIST, type Task, type View } from "@/lib/tasks";
 import { addDays, dayLabel } from "@/lib/links";
 import { isDate, todaySeoul } from "@/lib/time";
 import { Sidebar } from "@/components/Sidebar";
@@ -22,14 +22,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
   await requireUser();
   const today = todaySeoul();
   const sp = await searchParams;
-  const v = (sp.v && (sp.v in VIEWS || sp.v === "list") ? sp.v : "today") as View;
-  const [counts, lists] = await Promise.all([getCounts(today), getLists()]);
+  const v = (sp.v && (sp.v in VIEWS || sp.v === "list" || sp.v === "label") ? sp.v : "today") as View;
+  const [counts, lists, labels] = await Promise.all([getCounts(today), getLists(), getLabels()]);
   const list = v === "list" ? lists.find((l) => l.id === Number(sp.id)) : undefined;
-  if (v === "list" && !list) notFound();
-  const active = v === "list" ? `list${list!.id}` : v;
-  const head = list ? { title: list.name, icon: "●", cls: color(list.color).text } : VIEWS[v];
+  const label = v === "label" ? labels.find((l) => l.id === Number(sp.id)) : undefined;
+  if ((v === "list" && !list) || (v === "label" && !label)) notFound();
+  const active = list ? `list${list.id}` : label ? `label${label.id}` : v;
+  const head = list ? { title: list.name, icon: "●", cls: color(list.color).text } : label ? { title: label.name, icon: "#", cls: color(label.color).text } : VIEWS[v];
 
-  const side = <Sidebar active={active} counts={counts} lists={lists} />;
+  const side = <Sidebar active={active} counts={counts} lists={lists} labels={labels} />;
   const title = (extra?: React.ReactNode) => (
     <div className="flex flex-wrap items-center gap-2">
       <h1 className={`text-2xl font-bold ${head.cls}`}><span className="mr-1.5">{head.icon}</span>{head.title}</h1>
@@ -61,24 +62,24 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
               {!isToday && <Link href="/" className="btn-ghost !py-0 text-xs">오늘로</Link>}
             </span>,
           )}
-          {isToday && <AddTask view="today" lists={lists} placeholder="오늘 할 일 추가" />}
+          {isToday && <AddTask view="today" lists={lists} labels={labels} placeholder="오늘 할 일 추가" />}
           {late.length > 0 && (
             <section className="space-y-1.5">
               <h2 className="text-xs font-semibold text-rose-700">마감 지남 {late.length}</h2>
-              {late.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} showMyDay={false} />)}
+              {late.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} labels={labels} showMyDay={false} />)}
             </section>
           )}
           {future && (
             <section className="space-y-1.5">
               <h2 className="text-xs font-semibold text-sky-800">이날 마감인 할 일 {tasks.length}</h2>
-              {tasks.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} />)}
+              {tasks.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} labels={labels} />)}
               {tasks.length === 0 && <p className="text-xs text-stone-400">없음 · 할 일을 열어 마감일을 이날로 정하면 여기 나옵니다.</p>}
             </section>
           )}
           {isToday && (
             <section className="space-y-1.5">
               {late.length > 0 && <h2 className="text-xs font-semibold text-stone-600">오늘</h2>}
-              {rest.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} showMyDay={false} />)}
+              {rest.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} labels={labels} showMyDay={false} />)}
               {tasks.length === 0 && <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-sm text-stone-400">오늘 할 일이 없습니다. 위에 적거나, 다른 목록의 할 일을 열어 &lsquo;☀ 오늘 할 일에 넣기&rsquo;를 체크하세요.</p>}
             </section>
           )}
@@ -112,7 +113,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
   }
 
   /* ── 중요 · 계획된 일정 · 작업 · 목록 ── */
-  const tasks = await getTasks(v, { listId: list?.id, today });
+  const tasks = await getTasks(v, { listId: list?.id, labelId: label?.id, today });
+  const labelDone = label ? await getLabelDone(label.id) : [];
   let groups: [string, Task[], string][] = [["", tasks, ""]];
   if (v === "planned") {
     const tmr = addDays(today, 1), week = addDays(today, 6);
@@ -129,14 +131,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
       {side}
       <div className="min-w-0 space-y-4">
         {title(<span className="text-sm text-stone-500">{tasks.length}개 남음</span>)}
-        <AddTask key={active} view={v} listId={list?.id} lists={lists} placeholder={v === "planned" ? "할 일 추가 (마감: 오늘, 바꾸려면 '날짜 · 목록')" : "할 일 추가"} />
+        <AddTask key={active} view={v} listId={list?.id} labelId={label?.id} lists={lists} labels={labels} placeholder={v === "planned" ? "할 일 추가 (마감: 오늘, 바꾸려면 '날짜 · 목록')" : "할 일 추가"} />
         {groups.map(([g, ts, cls]) => (
           <section key={g || "_"} className="space-y-1.5">
             {g && <h2 className={`text-xs font-semibold ${cls}`}>{g} {ts.length}</h2>}
-            {ts.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} showList={v !== "list" && v !== "inbox"} />)}
+            {ts.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} labels={labels} showList={v !== "list" && v !== "inbox"} />)}
           </section>
         ))}
         {tasks.length === 0 && <p className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-400">남은 할 일이 없습니다.</p>}
+        {labelDone.length > 0 && (
+          <section className="space-y-1.5 pt-2">
+            <h2 className="text-xs font-semibold text-emerald-700">이 라벨로 끝낸 일 {labelDone.length}</h2>
+            {labelDone.map((t) => <DoneRow key={t.id} t={t} showDate />)}
+          </section>
+        )}
       </div>
     </div>
   );
