@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { getDayNotes } from "@/lib/data";
-import { getDayAttCounts, getDoneByDay, getLists, getMonthTasks } from "@/lib/tasks";
+import { getDayAttCounts, getDoneByDay, getLabels, getLists, getMonthTasks } from "@/lib/tasks";
 import { addDays, dayLabel } from "@/lib/links";
 import { todaySeoul } from "@/lib/time";
 import { AddTask, TaskRow, DoneRow } from "@/components/Tasks";
@@ -21,7 +21,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
   const month = `${y}-${pad(m)}`;
   const first = `${month}-01`;
   const last = addDays(`${shift(y, m, 1)}-01`, -1);
-  const [tasks, doneBy, notes, lists, attBy] = await Promise.all([getMonthTasks(month), getDoneByDay(first, last), getDayNotes(first, last), getLists(), getDayAttCounts(first, last)]);
+  const [tasks, doneBy, notes, lists, attBy, labels] = await Promise.all([getMonthTasks(month), getDoneByDay(first, last), getDayNotes(first, last), getLists(), getDayAttCounts(first, last), getLabels()]);
   const noteBy = new Map(notes.map((n) => [n.day, n.body]));
   const dueBy = new Map<string, typeof tasks>();
   for (const t of tasks) if (t.due) dueBy.set(t.due, [...(dueBy.get(t.due) ?? []), t]);
@@ -71,9 +71,9 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold">{m}월에 챙길 것 <span className="text-sm font-normal text-stone-500">매달 하는 일은 &lsquo;매달 반복&rsquo;을 체크하면 다음 달에도 자동으로 들어갑니다</span></h2>
-        <AddTask view="month" month={month} lists={lists} placeholder={`${m}월에 챙길 것 (예: 아파트 게시판 광고 비용 청구)`} />
+        <AddTask view="month" month={month} lists={lists} labels={labels} placeholder={`${m}월에 챙길 것 (예: 아파트 게시판 광고 비용 청구)`} />
         <div className="space-y-1.5">
-          {open.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} />)}
+          {open.map((t) => <TaskRow key={t.id} t={t} today={today} lists={lists} labels={labels} />)}
           {open.length === 0 && <p className="rounded-lg border border-dashed border-stone-300 p-5 text-center text-sm text-stone-400">{m}월에 남은 일이 없습니다.</p>}
         </div>
         {doneM.length > 0 && (
