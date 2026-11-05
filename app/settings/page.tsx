@@ -1,10 +1,10 @@
 import { requireUser } from "@/lib/session";
 import { getSetting } from "@/lib/data";
-import { getLists } from "@/lib/tasks";
+import { getLabels, getLists } from "@/lib/tasks";
 import { adminEmails } from "@/lib/users";
 import { disconnectKakao } from "@/lib/actions-tasks";
 import { NotifyForm } from "@/components/NotifyForms";
-import { AddListForm, ListRow } from "@/components/ListForms";
+import { AddLabelForm, AddListForm, LabelRow, ListRow } from "@/components/ListForms";
 import { siteUrl } from "@/lib/notify";
 import { todaySeoul } from "@/lib/time";
 import { disconnectDrive } from "@/lib/actions-files";
@@ -16,7 +16,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     getSetting("notify_email"), getSetting("notify_days", "3"), getSetting("email_on", "0"), getSetting("kakao_on", "0"),
     getSetting("kakao_refresh"), getSetting("kakao_refresh_exp", "0"), getSetting("last_notify"), getLists(),
   ]);
-  const [driveRefresh, driveFolder] = await Promise.all([getSetting("gdrive_refresh"), getSetting("gdrive_folder")]);
+  const [driveRefresh, driveFolder, labels] = await Promise.all([getSetting("gdrive_refresh"), getSetting("gdrive_folder"), getLabels()]);
   const gmailReady = !!process.env.GMAIL_USER && !!process.env.GMAIL_APP_PASSWORD;
   const kakaoKey = !!process.env.KAKAO_REST_KEY;
   const cronReady = !!process.env.CRON_SECRET;
@@ -97,6 +97,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <p className="text-sm text-stone-600">&lsquo;작업&rsquo;은 기본 목록입니다. 목록을 지우면 안의 할 일은 &lsquo;작업&rsquo;으로 옮겨집니다. 순서 숫자가 작을수록 위에 나옵니다.</p>
         {lists.map((l) => <ListRow key={l.id} l={l} />)}
         <div className="max-w-xs rounded-md bg-stone-100 p-1"><AddListForm /></div>
+      </section>
+
+      <section className="card space-y-2 p-4">
+        <h2 className="font-semibold"># 라벨</h2>
+        <p className="text-sm text-stone-600">할 일 하나에 라벨을 여러 개 붙일 수 있습니다 (예: 학부모 안내 · 서류 · 급함). 라벨을 지우면 할 일은 그대로 두고 라벨만 빠집니다.</p>
+        {labels.map((l) => <LabelRow key={l.id} l={l} />)}
+        <div className="max-w-xs rounded-md bg-stone-100 p-1"><AddLabelForm /></div>
       </section>
     </div>
   );
