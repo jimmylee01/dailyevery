@@ -185,6 +185,7 @@ export function DoneRow({ t, showDate = false }: { t: Task; showDate?: boolean }
           <span className="font-medium text-emerald-700">{showDate ? `${dayLabel(seoulDay(t.done_at!))} ` : ""}{hm(t.done_at)} 끝냄</span>
           {t.due && <span className="text-stone-400">마감 {dayLabel(t.due)}</span>}
         </div>
+        {t.note && <div className="mt-1 whitespace-pre-line rounded bg-stone-50 px-2 py-1 text-sm text-stone-600">📝 {t.note}</div>}
         <DoneMemo id={t.id} memo={t.done_note} />
         <div className="mt-1.5"><Attachments target={{ taskId: t.id }} items={t.atts} label="결과 사진 · 파일" compact /></div>
       </div>
