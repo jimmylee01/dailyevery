@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { color, DEFAULT_LIST, type List } from "@/lib/task-types";
-import { AddListForm } from "@/components/ListForms";
+import { color, DEFAULT_LIST, type Label, type List } from "@/lib/task-types";
+import { AddLabelForm, AddListForm } from "@/components/ListForms";
 
 type Counts = { today: number; important: number; planned: number; inbox: number; overdue: number };
 
-export function Sidebar({ active, counts, lists }: { active: string; counts: Counts; lists: List[] }) {
+export function Sidebar({ active, counts, lists, labels }: { active: string; counts: Counts; lists: List[]; labels: Label[] }) {
   const item = (key: string, href: string, icon: string, label: string, n?: number, cls = "") => (
     <Link key={key} href={href}
       className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm ${active === key ? "bg-white font-semibold shadow-sm" : "hover:bg-white/60"}`}>
@@ -30,6 +30,17 @@ export function Sidebar({ active, counts, lists }: { active: string; counts: Cou
         </Link>
       ))}
       <AddListForm />
+      <div className="my-2 border-t border-stone-200" />
+      <div className="px-2.5 pb-0.5 text-[11px] font-semibold text-stone-500">라벨</div>
+      {labels.map((l) => (
+        <Link key={l.id} href={`/?v=label&id=${l.id}`}
+          className={`flex items-center gap-2.5 rounded-md px-2.5 py-1 text-sm ${active === `label${l.id}` ? "bg-white font-semibold shadow-sm" : "hover:bg-white/60"}`}>
+          <span className={`flex w-5 justify-center ${color(l.color).text}`}>#</span>
+          <span className="min-w-0 flex-1 truncate">{l.name}</span>
+          {!!l.open && <span className="text-xs tabular-nums text-stone-500">{l.open}</span>}
+        </Link>
+      ))}
+      <AddLabelForm />
     </nav>
   );
 }
