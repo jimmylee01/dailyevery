@@ -1,9 +1,9 @@
 import { q } from "@/lib/db";
 import { todaySeoul } from "@/lib/time";
 
-import { COLORS, color, DEFAULT_LIST, type Att, type List, type Task, type View } from "@/lib/task-types";
+import { COLORS, color, DEFAULT_LIST, type Att, type Label, type List, type Task, type View } from "@/lib/task-types";
 export { COLORS, color, DEFAULT_LIST };
-export type { Att, List, Task, View };
+export type { Att, Label, List, Task, View };
 
 const pad = (n: number) => String(n).padStart(2, "0");
 export const isMonthStr = (v: unknown): v is string => typeof v === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
@@ -31,7 +31,9 @@ export async function ensureMonth(month: string) {
 const SELECT = `select t.id, t.title, t.list_id, l.name as list_name, l.color as list_color, t.due::text, t.my_day::text, t.month,
   t.important, t.note, t.done_at, t.done_note, t.repeat_id,
   (select coalesce(json_agg(json_build_object('id', a.id, 'drive_id', a.drive_id, 'name', a.name, 'mime', a.mime, 'link', a.link) order by a.id), '[]'::json)
-     from attachments a where a.task_id = t.id) as atts
+     from attachments a where a.task_id = t.id) as atts,
+  (select coalesce(json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) order by lb.sort, lb.id), '[]'::json)
+     from task_labels tl join labels lb on lb.id = tl.label_id where tl.task_id = t.id) as labels
   from tasks t left join lists l on l.id = t.list_id`;
 
 export async function getLists(): Promise<List[]> {
@@ -51,7 +53,19 @@ export async function getCounts(today = todaySeoul()) {
   return r;
 }
 
-export async function getTasks(view: View, opts: { listId?: number; today?: string } = {}): Promise<Task[]> {
+export async function getLabels(): Promise<Label[]> {
+  return q<Label>(`select lb.id, lb.name, lb.color, lb.sort,
+    (select count(*)::int from task_labels tl join tasks t on t.id = tl.task_id where tl.label_id = lb.id and t.done_at is null and not t.hidden) as open
+    from labels lb order by lb.sort, lb.id`);
+}
+
+/** 라벨 붙은 끝낸 일 */
+export async function getLabelDone(labelId: number): Promise<Task[]> {
+  return q<Task>(`${SELECT} where t.done_at is not null and not t.hidden and exists (select 1 from task_labels tl where tl.task_id = t.id and tl.label_id = $1)
+                  order by t.done_at desc limit 200`, [labelId]);
+}
+
+export async function getTasks(view: View, opts: { listId?: number; labelId?: number; today?: string } = {}): Promise<Task[]> {
   const today = opts.today ?? todaySeoul();
   const open = "t.done_at is null and not t.hidden";
   switch (view) {
@@ -65,6 +79,9 @@ export async function getTasks(view: View, opts: { listId?: number; today?: stri
       return q<Task>(`${SELECT} where ${open} and t.list_id is null order by t.important desc, t.due nulls last, t.id`);
     case "list":
       return q<Task>(`${SELECT} where ${open} and t.list_id = $1 order by t.important desc, t.due nulls last, t.id`, [opts.listId ?? 0]);
+    case "label":
+      return q<Task>(`${SELECT} where ${open} and exists (select 1 from task_labels tl where tl.task_id = t.id and tl.label_id = $1)
+                      order by t.due nulls last, t.important desc, t.id`, [opts.labelId ?? 0]);
     case "done":
       return q<Task>(`${SELECT} where t.done_at is not null and not t.hidden order by t.done_at desc limit 300`);
   }

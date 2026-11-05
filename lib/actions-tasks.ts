@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { q } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { ensureMonth, isMonthStr, monthDate } from "@/lib/tasks";
-import { COLORS } from "@/lib/task-types";
+import { COLORS, type Label } from "@/lib/task-types";
 import { isDate, todaySeoul } from "@/lib/time";
 import { sendReminder } from "@/lib/notify";
 
@@ -15,6 +15,12 @@ const listOf = (v: string) => (Number(v) > 0 ? Number(v) : null);
 const done = () => revalidatePath("/", "layout");
 
 /* ───────── 할 일 ───────── */
+
+const labelIds = (fd: FormData) => [...new Set(fd.getAll("label").map((v) => Number(v)).filter((n) => n > 0))];
+async function setLabels(taskId: number, ids: number[]) {
+  await q("delete from task_labels where task_id=$1", [taskId]);
+  if (ids.length) await q("insert into task_labels (task_id, label_id) select $1, unnest($2::int[]) on conflict do nothing", [taskId, ids]);
+}
 
 /** 빠른 추가: 지금 보고 있는 화면에 맞춰 (오늘 · 중요 · 계획 · 목록 · 그 달) */
 export async function addTask(_p: FormState, fd: FormData): Promise<FormState> {
@@ -40,8 +46,9 @@ export async function addTask(_p: FormState, fd: FormData): Promise<FormState> {
     }
   }
   if (view === "planned" && !due) due = today;
-  await q("insert into tasks (title, list_id, due, my_day, month, important, note) values ($1,$2,$3,$4,$5,$6,$7)",
+  const [t] = await q<{ id: number }>("insert into tasks (title, list_id, due, my_day, month, important, note) values ($1,$2,$3,$4,$5,$6,$7) returning id",
     [title, list, due, view === "today" ? today : null, month, view === "important" || fd.get("important") === "on", note]);
+  await setLabels(t.id, labelIds(fd));
   done();
   return { ok: `'${title}' 추가했습니다.` };
 }
@@ -82,6 +89,7 @@ export async function saveTask(_p: FormState, fd: FormData): Promise<FormState> 
     `update tasks set title=$2, list_id=$3, due=$4, note=$5, important=$6,
        my_day = case when $7::date is null then null else coalesce(my_day, $7::date) end where id=$1 returning repeat_id`,
     [id, title, listOf(str(fd, "list_id")), due, str(fd, "note").slice(0, 2000), fd.get("important") === "on", myDay]);
+  if (fd.get("labels_on") === "1") await setLabels(id, labelIds(fd));
   if (t?.repeat_id && fd.get("apply_repeat") === "on") {
     await q("update repeat_tasks set title=$2, list_id=$3, day=$4, note=$5, important=$6 where id=$1",
       [t.repeat_id, title, listOf(str(fd, "list_id")), due ? Number(due.slice(8)) : null, str(fd, "note").slice(0, 2000), fd.get("important") === "on"]);
@@ -132,6 +140,48 @@ export async function saveList(_p: FormState, fd: FormData): Promise<FormState> 
 export async function deleteList(fd: FormData) {
   await requireUser();
   await q("delete from lists where id=$1", [Number(str(fd, "id"))]);
+  done();
+}
+
+/* ───────── 라벨 ───────── */
+
+/** 할 일 고치는 중에 바로 새 라벨 만들기 */
+const LABEL_COLORS = ["sky", "rose", "emerald", "amber", "violet", "orange", "teal", "pink", "indigo", "stone"];
+export async function createLabel(name: string, c = ""): Promise<Label | { error: string }> {
+  await requireUser();
+  const n = name.trim().slice(0, 30);
+  if (!n) return { error: "라벨 이름을 적으세요." };
+  const [have] = await q<Label>("select id, name, color from labels where lower(name) = lower($1)", [n]);
+  if (have) return have;
+  if (!(c in COLORS)) {
+    const [{ n: cnt }] = await q<{ n: number }>("select count(*)::int n from labels");
+    c = LABEL_COLORS[cnt % LABEL_COLORS.length];
+  }
+  const [r] = await q<Label>("insert into labels (name, color, sort) values ($1,$2,(select coalesce(max(sort),0)+1 from labels)) returning id, name, color",
+    [n, c]);
+  done();
+  return r;
+}
+
+export async function addLabel(_p: FormState, fd: FormData): Promise<FormState> {
+  const r = await createLabel(str(fd, "name"), str(fd, "color"));
+  return "error" in r ? { error: r.error } : { ok: `'${r.name}' 라벨을 만들었습니다.` };
+}
+
+export async function saveLabel(_p: FormState, fd: FormData): Promise<FormState> {
+  await requireUser();
+  const name = str(fd, "name").slice(0, 30);
+  if (!name) return { error: "라벨 이름을 적으세요." };
+  const c = str(fd, "color");
+  await q("update labels set name=$2, color=$3, sort=$4 where id=$1", [Number(str(fd, "id")), name, c in COLORS ? c : "sky", Number(str(fd, "sort")) || 0]);
+  done();
+  return { ok: "저장했습니다." };
+}
+
+/** 라벨을 지워도 할 일은 그대로 (라벨만 빠짐) */
+export async function deleteLabel(fd: FormData) {
+  await requireUser();
+  await q("delete from labels where id=$1", [Number(str(fd, "id"))]);
   done();
 }
 

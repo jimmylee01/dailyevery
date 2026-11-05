@@ -47,7 +47,16 @@ function ensureSchema(): Promise<void> {
          created_at timestamptz not null default now()
        );
        create index if not exists attachments_task on attachments(task_id);
-       create index if not exists attachments_day on attachments(day);`,
+       create index if not exists attachments_day on attachments(day);
+       create table if not exists labels (
+         id serial primary key, name text not null, color text not null default 'sky', sort int not null default 0,
+         created_at timestamptz not null default now()
+       );
+       create table if not exists task_labels (
+         task_id int not null references tasks(id) on delete cascade, label_id int not null references labels(id) on delete cascade,
+         primary key (task_id, label_id)
+       );
+       create index if not exists task_labels_label on task_labels(label_id);`,
     )
     .then(() => undefined)
     .catch((e) => { g._schemaReady = undefined; throw e; });

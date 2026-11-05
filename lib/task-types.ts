@@ -3,10 +3,11 @@ export type List = { id: number; name: string; color: string; sort: number; open
 export type Task = {
   id: number; title: string; list_id: number | null; list_name: string | null; list_color: string | null;
   due: string | null; my_day: string | null; month: string | null; important: boolean; note: string;
-  done_at: string | null; done_note: string; repeat_id: number | null; atts: Att[];
+  done_at: string | null; done_note: string; repeat_id: number | null; atts: Att[]; labels: Label[];
 };
+export type Label = { id: number; name: string; color: string; open?: number };
 export type Att = { id: number; drive_id: string; name: string; mime: string; link: string };
-export type View = "today" | "important" | "planned" | "inbox" | "done" | "list";
+export type View = "today" | "important" | "planned" | "inbox" | "done" | "list" | "label";
 
 export const DEFAULT_LIST = "작업";
 export const COLORS: Record<string, { dot: string; text: string; bg: string }> = {
@@ -17,6 +18,9 @@ export const COLORS: Record<string, { dot: string; text: string; bg: string }> =
   sky: { dot: "bg-sky-500", text: "text-sky-700", bg: "bg-sky-50" },
   violet: { dot: "bg-violet-500", text: "text-violet-700", bg: "bg-violet-50" },
   stone: { dot: "bg-stone-500", text: "text-stone-700", bg: "bg-stone-100" },
+  orange: { dot: "bg-orange-500", text: "text-orange-700", bg: "bg-orange-50" },
+  teal: { dot: "bg-teal-500", text: "text-teal-700", bg: "bg-teal-50" },
+  pink: { dot: "bg-pink-500", text: "text-pink-700", bg: "bg-pink-50" },
 };
 export const color = (c: string | null | undefined) => COLORS[c ?? ""] ?? COLORS.indigo;
 
