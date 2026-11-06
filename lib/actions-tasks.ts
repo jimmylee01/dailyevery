@@ -84,6 +84,9 @@ export async function saveTask(_p: FormState, fd: FormData): Promise<FormState> 
   const title = str(fd, "title").slice(0, 300);
   if (!title) return { error: "할 일을 적으세요." };
   const due = isDate(str(fd, "due")) ? str(fd, "due") : null;
+  let start = isDate(str(fd, "start_day")) ? str(fd, "start_day") : null;
+  if (!due || (start && start >= due)) start = null;
+  if (fd.has("start_on")) await q("update tasks set start_day=$2 where id=$1", [id, start]);
   const myDay = fd.get("my_day") === "on" ? todaySeoul() : null;
   const [t] = await q<{ repeat_id: number | null }>(
     `update tasks set title=$2, list_id=$3, due=$4, note=$5, important=$6,
@@ -96,6 +99,20 @@ export async function saveTask(_p: FormState, fd: FormData): Promise<FormState> 
   }
   done();
   return { ok: "저장했습니다." };
+}
+
+/** 달력에서 여러 날을 드래그해 넣은 할 일 (시작일 ~ 마감일) */
+export async function addRangeTask(input: { title: string; from: string; to: string; listId: number | null; important: boolean; labels: number[]; note: string }): Promise<FormState> {
+  await requireUser();
+  const title = input.title.trim().slice(0, 300);
+  if (!title) return { error: "할 일을 적으세요." };
+  if (!isDate(input.from) || !isDate(input.to)) return { error: "날짜가 이상합니다." };
+  const [from, to] = input.from <= input.to ? [input.from, input.to] : [input.to, input.from];
+  const [t] = await q<{ id: number }>("insert into tasks (title, list_id, start_day, due, month, important, note) values ($1,$2,$3,$4,$5,$6,$7) returning id",
+    [title, input.listId && input.listId > 0 ? input.listId : null, from === to ? null : from, to, from.slice(0, 7), input.important, input.note.trim().slice(0, 2000)]);
+  await setLabels(t.id, [...new Set(input.labels.filter((n) => n > 0))]);
+  done();
+  return { ok: `'${title}' 추가했습니다.` };
 }
 
 /** scope: one = 이것만 지우기, repeat = 매달 반복 그만(아직 안 한 것 지움) */

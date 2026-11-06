@@ -56,7 +56,8 @@ function ensureSchema(): Promise<void> {
          task_id int not null references tasks(id) on delete cascade, label_id int not null references labels(id) on delete cascade,
          primary key (task_id, label_id)
        );
-       create index if not exists task_labels_label on task_labels(label_id);`,
+       create index if not exists task_labels_label on task_labels(label_id);
+       alter table tasks add column if not exists start_day date;`,
     )
     .then(() => undefined)
     .catch((e) => { g._schemaReady = undefined; throw e; });

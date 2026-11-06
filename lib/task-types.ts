@@ -2,7 +2,7 @@
 export type List = { id: number; name: string; color: string; sort: number; open: number };
 export type Task = {
   id: number; title: string; list_id: number | null; list_name: string | null; list_color: string | null;
-  due: string | null; my_day: string | null; month: string | null; important: boolean; note: string;
+  due: string | null; start_day: string | null; my_day: string | null; month: string | null; important: boolean; note: string;
   done_at: string | null; done_note: string; repeat_id: number | null; atts: Att[]; labels: Label[];
 };
 export type Label = { id: number; name: string; color: string; open?: number };

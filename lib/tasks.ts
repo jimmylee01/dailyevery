@@ -28,7 +28,7 @@ export async function ensureMonth(month: string) {
     [month]);
 }
 
-const SELECT = `select t.id, t.title, t.list_id, l.name as list_name, l.color as list_color, t.due::text, t.my_day::text, t.month,
+const SELECT = `select t.id, t.title, t.list_id, l.name as list_name, l.color as list_color, t.due::text, t.start_day::text, t.my_day::text, t.month,
   t.important, t.note, t.done_at, t.done_note, t.repeat_id,
   (select coalesce(json_agg(json_build_object('id', a.id, 'drive_id', a.drive_id, 'name', a.name, 'mime', a.mime, 'link', a.link) order by a.id), '[]'::json)
      from attachments a where a.task_id = t.id) as atts,
@@ -44,7 +44,7 @@ export async function getLists(): Promise<List[]> {
 export async function getCounts(today = todaySeoul()) {
   await ensureMonth(today.slice(0, 7));
   const [r] = await q<{ today: number; important: number; planned: number; inbox: number; overdue: number }>(
-    `select count(*) filter (where my_day = $1 or due <= $1)::int as today,
+    `select count(*) filter (where my_day = $1 or due <= $1 or start_day <= $1)::int as today,
             count(*) filter (where important)::int as important,
             count(*) filter (where due is not null)::int as planned,
             count(*) filter (where list_id is null)::int as inbox,
@@ -70,7 +70,7 @@ export async function getTasks(view: View, opts: { listId?: number; labelId?: nu
   const open = "t.done_at is null and not t.hidden";
   switch (view) {
     case "today":
-      return q<Task>(`${SELECT} where ${open} and (t.my_day = $1 or t.due <= $1) order by t.due nulls last, t.important desc, t.id`, [today]);
+      return q<Task>(`${SELECT} where ${open} and (t.my_day = $1 or t.due <= $1 or t.start_day <= $1) order by t.due nulls last, t.important desc, t.id`, [today]);
     case "important":
       return q<Task>(`${SELECT} where ${open} and t.important order by t.due nulls last, t.id`);
     case "planned":
@@ -95,7 +95,8 @@ export async function getDoneOn(day: string): Promise<Task[]> {
 /** 그 달 할 일: 마감일이 그 달이거나 그 달 할 일로 넣은 것 */
 export async function getMonthTasks(month: string): Promise<Task[]> {
   await ensureMonth(month);
-  return q<Task>(`${SELECT} where not t.hidden and (t.month = $1 or to_char(t.due, 'YYYY-MM') = $1)
+  return q<Task>(`${SELECT} where not t.hidden and (t.month = $1 or to_char(t.due, 'YYYY-MM') = $1
+                    or (t.start_day is not null and to_char(t.start_day, 'YYYY-MM') <= $1 and to_char(t.due, 'YYYY-MM') >= $1))
                   order by t.done_at is not null, t.due nulls last, t.id`, [month]);
 }
 
