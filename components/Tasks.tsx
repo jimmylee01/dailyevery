@@ -151,6 +151,7 @@ export function TaskRow({ t, today, lists, labels = [], showList = true, showMyD
             <LabelChips labels={t.labels} />
             {showList && <span className={c.text}>{t.list_name ?? DEFAULT_LIST}</span>}
             {showMyDay && t.my_day === today && <span className="text-indigo-600">☀ 오늘 할 일</span>}
+            {t.start_day && <span className="text-stone-500">🗓 {dayLabel(t.start_day)} ~</span>}
             {due && <span className={due.cls}>📅 {due.t}</span>}
             {t.repeat_id && <span className="text-stone-500">🔁 매달</span>}
             {t.note && <span className="truncate text-stone-500">📝 {t.note.split("\n")[0]}</span>}
@@ -189,6 +190,8 @@ function Editor({ t, lists, labels, today, imp, onClose, onGone }: { t: Task; li
             {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </label>
+        <input type="hidden" name="start_on" value="1" />
+        <label className="flex items-center gap-1">시작 <input type="date" name="start_day" defaultValue={t.start_day ?? ""} className="input !w-auto !py-0.5" /></label>
         <label className="flex items-center gap-1">마감 <input type="date" name="due" defaultValue={t.due ?? ""} className="input !w-auto !py-0.5" /></label>
         <label className="flex items-center gap-1"><input type="checkbox" name="important" defaultChecked={imp} /> 중요</label>
         <label className="flex items-center gap-1"><input type="checkbox" name="my_day" defaultChecked={t.my_day === today} /> ☀ 오늘 할 일에 넣기</label>
