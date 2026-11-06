@@ -5,6 +5,7 @@ import { getDayAttCounts, getDoneByDay, getLabels, getLists, getMonthTasks } fro
 import { addDays, dayLabel } from "@/lib/links";
 import { todaySeoul } from "@/lib/time";
 import { AddTask, TaskRow, DoneRow } from "@/components/Tasks";
+import { MonthGrid, type CalItem } from "@/components/MonthGrid";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 function monthOf(v: string | undefined, today: string): { y: number; m: number } {
@@ -23,8 +24,9 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
   const last = addDays(`${shift(y, m, 1)}-01`, -1);
   const [tasks, doneBy, notes, lists, attBy, labels] = await Promise.all([getMonthTasks(month), getDoneByDay(first, last), getDayNotes(first, last), getLists(), getDayAttCounts(first, last), getLabels()]);
   const noteBy = new Map(notes.map((n) => [n.day, n.body]));
-  const dueBy = new Map<string, typeof tasks>();
-  for (const t of tasks) if (t.due) dueBy.set(t.due, [...(dueBy.get(t.due) ?? []), t]);
+  const item = (t: (typeof tasks)[number]): CalItem => ({ id: t.id, title: t.title, from: t.start_day ?? t.due!, to: t.due!, done: !!t.done_at, color: t.labels[0]?.color ?? t.list_color });
+  const spans = tasks.filter((t) => t.start_day && t.due).map(item);
+  const dues = tasks.filter((t) => !t.start_day && t.due).map(item);
   const lead = new Date(`${first}T00:00:00Z`).getUTCDay();
   const days: (string | null)[] = [...Array(lead).fill(null)];
   for (let d = first; d <= last; d = addDays(d, 1)) days.push(d);
@@ -50,24 +52,10 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
         <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50 text-center text-xs font-semibold text-stone-600">
           {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => <div key={w} className={`py-1.5 ${i === 0 ? "text-rose-600" : i === 6 ? "text-sky-700" : ""}`}>{w}</div>)}
         </div>
-        <div className="grid grid-cols-7">
-          {days.map((d, k) => d ? (
-            <Link key={d} href={`/?day=${d}`} className={`min-h-28 border-b border-r border-stone-100 p-1.5 text-left hover:ring-2 hover:ring-inset hover:ring-brand ${d === today ? "bg-indigo-50/50 ring-2 ring-inset ring-brand" : ""}`}>
-              <div className="flex items-baseline gap-1">
-                <span className={`text-sm font-semibold ${k % 7 === 0 ? "text-rose-600" : k % 7 === 6 ? "text-sky-700" : ""}`}>{Number(d.slice(8))}</span>
-                {!!doneBy.get(d) && <span className="ml-auto rounded bg-emerald-100 px-1 text-[10px] font-semibold text-emerald-800">✓{doneBy.get(d)}</span>}
-              </div>
-              {(dueBy.get(d) ?? []).slice(0, 3).map((t) => (
-                <div key={t.id} className={`mt-0.5 truncate rounded px-1 text-[11px] ${t.done_at ? "bg-stone-100 text-stone-400 line-through" : d < today ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900"}`}>📌 {t.title}</div>
-              ))}
-              {(dueBy.get(d)?.length ?? 0) > 3 && <div className="text-[10px] text-stone-500">+{dueBy.get(d)!.length - 3}개 더</div>}
-              {!!attBy.get(d) && <div className="mt-0.5 text-[10px] text-stone-500">📎 {attBy.get(d)}</div>}
-              {noteBy.get(d) && <div className="mt-0.5 line-clamp-2 whitespace-pre-line text-[11px] leading-snug text-stone-600">📝 {noteBy.get(d)}</div>}
-            </Link>
-          ) : <div key={`e${k}`} className="min-h-28 border-b border-r border-stone-100 bg-stone-50/50" />)}
-        </div>
+        <MonthGrid days={days} today={today} spans={spans} dues={dues} lists={lists} labels={labels}
+          doneBy={Object.fromEntries(doneBy)} notes={Object.fromEntries(noteBy)} atts={Object.fromEntries(attBy)} />
       </div>
-      <p className="text-xs text-stone-500">📌 = 그날 마감인 할 일 (빨강: 지남, 노랑: 남음, 회색: 끝남) · ✓숫자 = 그날 끝낸 일 · 날짜를 누르면 그날 할 일 · 끝낸 일 · 메모로 갑니다. 앞으로 올 날짜에 메모를 적어 두면 그날 아침 알림으로 보내 드립니다.</p>
+      <p className="text-xs text-stone-500"><b>여러 날을 끌어서(드래그) 고르면 그 기간 할 일을 넣을 수 있습니다.</b> 할 일 앞 동그라미를 누르면 끝냄 / 되돌림. 작은 칸 = 그날 마감인 할 일 (빨강: 지남, 노랑: 남음, 회색: 끝남) · 막대 = 기간 할 일 · ✓숫자 = 그날 끝낸 일 · 날짜를 누르면 그날 할 일 · 끝낸 일 · 메모로 갑니다. 앞으로 올 날짜에 메모를 적어 두면 그날 아침 알림으로 보내 드립니다.</p>
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold">{m}월에 챙길 것 <span className="text-sm font-normal text-stone-500">매달 하는 일은 &lsquo;매달 반복&rsquo;을 체크하면 다음 달에도 자동으로 들어갑니다</span></h2>
